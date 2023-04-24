@@ -7,3 +7,5 @@
 - [x] Fix balls spawning on blocks
 - [x] fix balls needing to click to go when spawning on blocks
 - [ ] Format game::end text
+- [ ] Make balls round
+- [ ] SOUNDS!

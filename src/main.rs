@@ -137,7 +137,7 @@ impl Ball {
         }
     }
     pub fn update(&mut self, dt: f32, player: &Player) {
-        if (self.ball_state == BallState::AttachedToPlayer) {
+        if self.ball_state == BallState::AttachedToPlayer {
             self.rect.x = player.rect.x + player.rect.w * 0.5 - self.rect.w * 0.5;
             self.rect.y = player.rect.y - self.rect.h;
         }
@@ -247,7 +247,7 @@ async fn main() {
     let mut player = Player::new();
     let mut blocks = Vec::new();
     let mut balls = Vec::new();
-    let mut ball_state = BallState::AttachedToPlayer;
+
     init_blocks(&mut blocks);
 
     balls.push(Ball::new(
@@ -332,7 +332,6 @@ async fn main() {
                 for ball in balls.iter_mut() {
                     if ball.ball_state == BallState::AttachedToPlayer {
                         if is_mouse_button_pressed(MouseButton::Left) {
-                            ball_state = BallState::Free;
                             ball.ball_state = BallState::Free;
                             ball.velocity = vec2(rand::gen_range(1f32, 1f32), -1.0).normalize();
                         }
