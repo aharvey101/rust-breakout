@@ -1,7 +1,8 @@
+use macroquad::input::*;
 use macroquad::prelude::*;
 
 const PLAYER_SIZE: Vec2 = Vec2::from_array([150f32, 20f32]);
-const PLAYER_SPEED: f32 = 700f32;
+
 const BLOCK_SIZE: Vec2 = Vec2::from_array([100f32, 40f32]);
 const BALL_SIZE: f32 = 20f32;
 const BALL_SPEED: f32 = 250f32;
@@ -15,6 +16,35 @@ pub fn draw_title_text(text: &str, font: Font) {
         text,
         screen_width() * 0.5f32 - dims.width * 0.5,
         screen_height() * 0.5f32 - dims.height * 0.5,
+        TextParams {
+            font,
+            font_size: 30u16,
+            color: BLACK,
+            ..Default::default()
+        },
+    );
+}
+
+fn game_text(score: &str, font: Font, player_lives: &usize) {
+    let score_text = format!("Score: {}", score);
+    let score_text_dim = measure_text(&score_text, Some(font), 30u16, 1.0);
+    draw_text_ex(
+        &score_text,
+        screen_width() * 0.5f32 - score_text_dim.width * 0.5,
+        40.0,
+        TextParams {
+            font,
+            font_size: 30u16,
+            color: BLACK,
+            ..Default::default()
+        },
+    );
+    let lives_text = format!("Lives: {}", player_lives);
+    let lives_text_dim = measure_text(&lives_text, Some(font), 30u16, 1.0);
+    draw_text_ex(
+        &lives_text,
+        screen_width() - lives_text_dim.width - 20.0,
+        40.0,
         TextParams {
             font,
             font_size: 30u16,
@@ -62,7 +92,10 @@ fn init_blocks(blocks: &mut Vec<Block>) {
 }
 
 fn init_balls(balls: &mut Vec<Ball>, player: &Player) {
-    balls.push(Ball::new(player.rect.point() + vec2(0f32, -BALL_SIZE)));
+    balls.push(Ball::new(
+        player.rect.point() + vec2(0f32, -BALL_SIZE),
+        BallState::AttachedToPlayer,
+    ));
 }
 
 pub enum GameState {
@@ -76,6 +109,11 @@ enum BlockType {
     Regular,
     SpawnBallOnDeath,
 }
+#[derive(PartialEq)]
+enum BallState {
+    AttachedToPlayer,
+    Free,
+}
 
 struct Block {
     rect: Rect,
@@ -86,16 +124,23 @@ struct Block {
 struct Ball {
     rect: Rect,
     velocity: Vec2,
+    ball_state: BallState,
 }
 
 impl Ball {
-    pub fn new(pos: Vec2) -> Self {
+    pub fn new(pos: Vec2, ball_state: BallState) -> Self {
         Self {
             rect: Rect::new(pos.x, pos.y, BALL_SIZE, BALL_SIZE),
-            velocity: vec2(rand::gen_range(-1f32, 1f32), 1f32).normalize(),
+            velocity: vec2(0f32, 0f32),
+            ball_state: ball_state,
         }
     }
-    pub fn update(&mut self, dt: f32) {
+    pub fn update(&mut self, dt: f32, player: &Player, ball_state: &mut BallState) {
+        if (ball_state == &BallState::AttachedToPlayer) {
+            self.rect.x = player.rect.x + player.rect.w * 0.5 - self.rect.w * 0.5;
+            self.rect.y = player.rect.y - self.rect.h;
+        }
+
         self.rect.x += self.velocity.x * dt * BALL_SPEED;
         self.rect.y += self.velocity.y * dt * BALL_SPEED;
         if self.rect.x < 0f32 {
@@ -152,13 +197,8 @@ impl Player {
             ),
         }
     }
-    pub fn update(&mut self, dt: f32) {
-        let x_move = match (is_key_down(KeyCode::Left), is_key_down(KeyCode::Right)) {
-            (true, false) => -1f32,
-            (false, true) => 1f32,
-            _ => 0f32,
-        };
-        self.rect.x += x_move * dt * PLAYER_SPEED;
+    pub fn update(&mut self, _dt: f32) {
+        self.rect.x = mouse_position().0;
 
         if self.rect.x < 0f32 {
             self.rect.x = 0f32
@@ -206,13 +246,13 @@ async fn main() {
     let mut player = Player::new();
     let mut blocks = Vec::new();
     let mut balls = Vec::new();
-
+    let mut ball_state = BallState::AttachedToPlayer;
     init_blocks(&mut blocks);
 
-    balls.push(Ball::new(vec2(
-        screen_width() * 0.5f32,
-        screen_height() * 0.5f32,
-    )));
+    balls.push(Ball::new(
+        vec2(screen_width() * 0.5f32, screen_height() * 0.5f32),
+        BallState::AttachedToPlayer,
+    ));
 
     loop {
         clear_background(WHITE);
@@ -225,41 +265,10 @@ async fn main() {
                 }
             }
             GameState::Game => {
-                let score_text = format!("Score: {}", score);
-                let score_text_dim = measure_text(&score_text, Some(font), 30u16, 1.0);
-                draw_text_ex(
-                    &score_text,
-                    screen_width() * 0.5f32 - score_text_dim.width * 0.5,
-                    40.0,
-                    TextParams {
-                        font,
-                        font_size: 30u16,
-                        color: BLACK,
-                        ..Default::default()
-                    },
-                );
-                let lives_text = format!("Lives: {}", player_lives);
-                let lives_text_dim = measure_text(&lives_text, Some(font), 30u16, 1.0);
-                draw_text_ex(
-                    &lives_text,
-                    screen_width() - lives_text_dim.width - 20.0,
-                    40.0,
-                    TextParams {
-                        font,
-                        font_size: 30u16,
-                        color: BLACK,
-                        ..Default::default()
-                    },
-                );
-                if is_key_pressed(KeyCode::Space) {
-                    balls.push(Ball::new(vec2(
-                        screen_width() * 0.5f32,
-                        screen_height() * 0.5f32,
-                    )));
-                }
+                game_text(&format!("Score: {}", score), font, &player_lives);
                 player.update(get_frame_time());
                 for ball in balls.iter_mut() {
-                    ball.update(get_frame_time());
+                    ball.update(get_frame_time(), &player, &mut ball_state);
                 }
                 let mut spawn_later = vec![];
                 for ball in balls.iter_mut() {
@@ -272,7 +281,10 @@ async fn main() {
                                 score += 10;
                                 // if block is special, spawn a ball
                                 if block.block_type == BlockType::SpawnBallOnDeath {
-                                    spawn_later.push(Ball::new(block.rect.point()));
+                                    spawn_later.push(Ball::new(
+                                        player.rect.point() - player.rect.w,
+                                        BallState::AttachedToPlayer,
+                                    ));
                                 }
                             }
                         }
@@ -281,33 +293,46 @@ async fn main() {
                 for ball in spawn_later.into_iter() {
                     balls.push(ball);
                 }
-                // get len
+
                 let balls_len = balls.len();
                 let was_last_ball = balls_len == 1;
                 balls.retain(|ball| ball.rect.y < screen_height());
                 let removed_balls = balls_len - balls.len();
                 if removed_balls > 0 && was_last_ball {
                     player_lives -= removed_balls;
-                    balls.push(Ball::new(vec2(
-                        screen_width() * 0.5f32,
-                        screen_height() * 0.5f32,
-                    )));
+                    balls.push(Ball::new(
+                        vec2(player.rect.x + player.rect.w * 0.5f32, player.rect.y - 10.0),
+                        BallState::AttachedToPlayer,
+                    ));
                     if player_lives == 0 {
                         game_state = GameState::Dead;
                     }
                 }
+                // Remove blocks with 0 lives
                 blocks.retain(|block| block.lives > 0);
                 if blocks.is_empty() {
                     game_state = GameState::LevelCompleted;
                 }
-
+                // update balls
                 for ball in balls.iter_mut() {
-                    ball.update(get_frame_time());
+                    ball.update(get_frame_time(), &mut player, &mut ball_state);
                     ball.draw();
                 }
+                // draw player
                 player.draw();
+                // draw blocks
                 for block in blocks.iter() {
                     block.draw();
+                }
+                // if mouse is clicked make ball move up
+                for ball in balls.iter_mut() {
+                    if ball.ball_state == BallState::AttachedToPlayer {
+                        if is_mouse_button_pressed(MouseButton::Left) {
+                            ball_state = BallState::Free;
+                            ball.ball_state = BallState::Free;
+                            ball.velocity = vec2(rand::gen_range(1f32, 1f32), -1.0).normalize();
+                        }
+                    }
                 }
             }
             GameState::LevelCompleted => {
