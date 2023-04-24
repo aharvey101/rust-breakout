@@ -94,6 +94,7 @@ fn init_blocks(blocks: &mut Vec<Block>) {
 fn init_balls(balls: &mut Vec<Ball>, player: &Player) {
     balls.push(Ball::new(
         player.rect.point() + vec2(0f32, -BALL_SIZE),
+        vec2(0f32, 0f32),
         BallState::AttachedToPlayer,
     ));
 }
@@ -128,15 +129,15 @@ struct Ball {
 }
 
 impl Ball {
-    pub fn new(pos: Vec2, ball_state: BallState) -> Self {
+    pub fn new(pos: Vec2, velocity: Vec2, ball_state: BallState) -> Self {
         Self {
             rect: Rect::new(pos.x, pos.y, BALL_SIZE, BALL_SIZE),
-            velocity: vec2(0f32, 0f32),
+            velocity: velocity,
             ball_state: ball_state,
         }
     }
-    pub fn update(&mut self, dt: f32, player: &Player, ball_state: &mut BallState) {
-        if (ball_state == &BallState::AttachedToPlayer) {
+    pub fn update(&mut self, dt: f32, player: &Player) {
+        if (self.ball_state == BallState::AttachedToPlayer) {
             self.rect.x = player.rect.x + player.rect.w * 0.5 - self.rect.w * 0.5;
             self.rect.y = player.rect.y - self.rect.h;
         }
@@ -251,6 +252,7 @@ async fn main() {
 
     balls.push(Ball::new(
         vec2(screen_width() * 0.5f32, screen_height() * 0.5f32),
+        vec2(0f32, 0f32),
         BallState::AttachedToPlayer,
     ));
 
@@ -268,7 +270,7 @@ async fn main() {
                 game_text(&format!("Score: {}", score), font, &player_lives);
                 player.update(get_frame_time());
                 for ball in balls.iter_mut() {
-                    ball.update(get_frame_time(), &player, &mut ball_state);
+                    ball.update(get_frame_time(), &player);
                 }
                 let mut spawn_later = vec![];
                 for ball in balls.iter_mut() {
@@ -282,8 +284,9 @@ async fn main() {
                                 // if block is special, spawn a ball
                                 if block.block_type == BlockType::SpawnBallOnDeath {
                                     spawn_later.push(Ball::new(
-                                        player.rect.point() - player.rect.w,
-                                        BallState::AttachedToPlayer,
+                                        block.rect.point(),
+                                        vec2(rand::gen_range(1f32, 1f32), -1.0).normalize(),
+                                        BallState::Free,
                                     ));
                                 }
                             }
@@ -302,6 +305,7 @@ async fn main() {
                     player_lives -= removed_balls;
                     balls.push(Ball::new(
                         vec2(player.rect.x + player.rect.w * 0.5f32, player.rect.y - 10.0),
+                        vec2(0f32, 0f32),
                         BallState::AttachedToPlayer,
                     ));
                     if player_lives == 0 {
@@ -315,7 +319,7 @@ async fn main() {
                 }
                 // update balls
                 for ball in balls.iter_mut() {
-                    ball.update(get_frame_time(), &mut player, &mut ball_state);
+                    ball.update(get_frame_time(), &player);
                     ball.draw();
                 }
                 // draw player
