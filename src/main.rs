@@ -10,12 +10,12 @@ struct Player {
     rect: Rect,
 }
 
-pub fn draw_title_text(text: &str, font: Font) {
+pub fn draw_title_text(text: &str, font: Font, offset: f32) {
     let dims = measure_text(text, Some(font), 30u16, 1.0);
     draw_text_ex(
         text,
         screen_width() * 0.5f32 - dims.width * 0.5,
-        screen_height() * 0.5f32 - dims.height * 0.5,
+        screen_height() * 0.5f32 - dims.height * 0.5 + offset,
         TextParams {
             font,
             font_size: 30u16,
@@ -26,6 +26,19 @@ pub fn draw_title_text(text: &str, font: Font) {
 }
 
 fn game_text(score: &str, font: Font, player_lives: &usize, level: &usize) {
+    let level_text = format!("Level: {}", level);
+    let level_text_dim = measure_text(&level_text, Some(font), 30u16, 1.0);
+    draw_text_ex(
+        &level_text,
+        level_text_dim.width - 100f32,
+        40.0,
+        TextParams {
+            font,
+            font_size: 30u16,
+            color: BLACK,
+            ..Default::default()
+        },
+    );
     let score_text = format!("Score: {}", score);
     let score_text_dim = measure_text(&score_text, Some(font), 30u16, 1.0);
     draw_text_ex(
@@ -60,31 +73,41 @@ fn reset_game(
     player: &mut Player,
     blocks: &mut Vec<Block>,
     balls: &mut Vec<Ball>,
+    level: &mut usize,
 ) {
+    *level = 0;
     *score = 0;
     *player_lives = 3;
     *player = Player::new();
     blocks.clear();
     balls.clear();
-    init_blocks(blocks);
+    init_blocks(blocks, level);
     init_balls(balls, &player);
 }
 
-fn init_blocks(blocks: &mut Vec<Block>) {
-    let (width, height) = (6, 6);
+fn init_blocks(blocks: &mut Vec<Block>, level: &mut usize) {
+    let width = 8;
     let padding = 5f32;
     let total_block_size = BLOCK_SIZE + vec2(padding, padding);
     let board_start = vec2(
         (screen_width() - (BLOCK_SIZE.x * width as f32)) * 0.5,
-        50f32,
+        100f32,
     );
     // instead of creating an array, filling random, a function that creates the level according to the
-    let level_one = vec![1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1];
-    for i in 0..level_one.len() {
-        let block_x = (i % width) as f32 * total_block_size.x;
-        let block_y = (i / width) as f32 * total_block_size.y;
-
-        let block_type = match level_one[i] {
+    let level_one = vec![0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+    let level_two = vec![0, 22, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,1];
+    let level_three = vec![
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    ];
+    let levels = vec![&level_one, &level_two, &level_three];
+    // TODO: This produces an off by 1 error when level is increased past the length of levels
+    for block in 0..levels[*level].len()  {
+        let block_x = (block % width) as f32 * total_block_size.x;
+        let block_y = (block / width) as f32 * total_block_size.y;
+        // let rand_index = rand::gen_range(0, blocks.len());
+        // println!("{}", level_one[rand_index]);
+        print!("{}", block);
+        let block_type = match level_one[block]   {
             0 => BlockType::Regular,
             1 => BlockType::SpawnBallOnDeath,
             _ => BlockType::Regular,
@@ -106,6 +129,7 @@ pub enum GameState {
     Menu,
     Game,
     LevelCompleted,
+    GameCompleted,
     Dead,
 }
 #[derive(PartialEq)]
@@ -246,7 +270,7 @@ async fn main() {
     let mut balls = Vec::new();
     let mut level = 1;
 
-    init_blocks(&mut blocks);
+    init_blocks(&mut blocks, &mut level);
 
     balls.push(Ball::new(
         vec2(screen_width() * 0.5f32, screen_height() * 0.5f32),
@@ -256,16 +280,21 @@ async fn main() {
 
     loop {
         clear_background(WHITE);
-
         match game_state {
             GameState::Menu => {
-                draw_title_text("Breakout! Press SPACE to start", font);
+                draw_title_text("Breakout! Press SPACE to start", font, 0f32);
                 if is_key_pressed(KeyCode::Space) {
                     game_state = GameState::Game;
                 }
             }
             GameState::Game => {
-                game_text(&format!("Score: {}", score), font, &player_lives, &level);
+                game_text(
+                    &format!("Score: {}", score),
+                    font,
+                    &player_lives,
+                    //TODO: seems gross
+                    &(&level + 1),
+                );
                 player.update(get_frame_time());
                 for ball in balls.iter_mut() {
                     ball.update(get_frame_time(), &player);
@@ -313,7 +342,18 @@ async fn main() {
                 // Remove blocks with 0 lives
                 blocks.retain(|block| block.lives > 0);
                 if blocks.is_empty() {
-                    game_state = GameState::LevelCompleted;
+                    // if another level move to next level, otherwise game is complete
+                    // init blocks for next level
+
+                    level +=1;
+                    // TODO: fix magic number
+                    if level > 3 {
+                        game_state = GameState::GameCompleted;
+                    }
+                    init_blocks(&mut blocks, &mut level);
+                    // reset balls
+                    balls = Vec::new();
+                    init_balls(&mut balls, &player);
                 }
                 // update balls
                 for ball in balls.iter_mut() {
@@ -336,14 +376,18 @@ async fn main() {
                     }
                 }
             }
+            GameState::GameCompleted => {
+                draw_title_text(&format!("You Win! Score: {}", score), font, 0f32);
+            }
             GameState::LevelCompleted => {
-                draw_title_text(&format!("You Win! Score: {}", score), font);
+                draw_title_text(&format!("You Win! Score: {}", score), font, 0f32);
             }
             GameState::Dead => {
                 draw_title_text(
-                    &format!("You Lose! Score: {}, Press SPACE to start again", score),
-                    font,
+                    &format!("You Lose! Score: {}", score),
+                    font, 0f32
                 );
+                draw_title_text("Press SPACE to start again", font,  50f32);
                 if is_key_pressed(KeyCode::Space) {
                     reset_game(
                         &mut score,
@@ -351,6 +395,7 @@ async fn main() {
                         &mut player,
                         &mut blocks,
                         &mut balls,
+                        &mut level,
                     );
                     game_state = GameState::Game;
                 }
