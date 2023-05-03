@@ -3,7 +3,7 @@ use macroquad::prelude::*;
 
 const PLAYER_SIZE: Vec2 = Vec2::from_array([150f32, 20f32]);
 
-const BLOCK_SIZE: Vec2 = Vec2::from_array([100f32, 40f32]);
+const BLOCK_SIZE: Vec2 = Vec2::from_array([75f32, 20f32]);
 const BALL_SIZE: f32 = 20f32;
 const BALL_SPEED: f32 = 250f32;
 struct Player {
@@ -25,7 +25,7 @@ pub fn draw_title_text(text: &str, font: Font) {
     );
 }
 
-fn game_text(score: &str, font: Font, player_lives: &usize) {
+fn game_text(score: &str, font: Font, player_lives: &usize, level: &usize) {
     let score_text = format!("Score: {}", score);
     let score_text_dim = measure_text(&score_text, Some(font), 30u16, 1.0);
     draw_text_ex(
@@ -78,15 +78,18 @@ fn init_blocks(blocks: &mut Vec<Block>) {
         (screen_width() - (BLOCK_SIZE.x * width as f32)) * 0.5,
         50f32,
     );
-    for i in 0..width * height {
+    // instead of creating an array, filling random, a function that creates the level according to the
+    let level_one = vec![1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1];
+    for i in 0..level_one.len() {
         let block_x = (i % width) as f32 * total_block_size.x;
         let block_y = (i / width) as f32 * total_block_size.y;
-        let rand_index = rand::gen_range(0, blocks.len());
-        let block_type = match rand_index {
+
+        let block_type = match level_one[i] {
             0 => BlockType::Regular,
             1 => BlockType::SpawnBallOnDeath,
             _ => BlockType::Regular,
         };
+
         blocks.push(Block::new(board_start + vec2(block_x, block_y), block_type));
     }
 }
@@ -138,8 +141,8 @@ impl Ball {
     }
     pub fn update(&mut self, dt: f32, player: &Player) {
         if self.ball_state == BallState::AttachedToPlayer {
-            self.rect.x = player.rect.x + player.rect.w * 0.5 - self.rect.w * 0.5;
-            self.rect.y = player.rect.y - self.rect.h;
+            self.rect.x = player.rect.x + player.rect.w * 0.5;
+            self.rect.y = player.rect.y - self.rect.h * 0.5;
         }
 
         self.rect.x += self.velocity.x * dt * BALL_SPEED;
@@ -156,13 +159,7 @@ impl Ball {
     }
 
     pub fn draw(&self) {
-        draw_rectangle(
-            self.rect.x,
-            self.rect.y,
-            self.rect.w,
-            self.rect.h,
-            DARKBROWN,
-        );
+        draw_circle(self.rect.x, self.rect.y, self.rect.w * 0.5, BLACK)
     }
 }
 
@@ -247,6 +244,7 @@ async fn main() {
     let mut player = Player::new();
     let mut blocks = Vec::new();
     let mut balls = Vec::new();
+    let mut level = 1;
 
     init_blocks(&mut blocks);
 
@@ -267,7 +265,7 @@ async fn main() {
                 }
             }
             GameState::Game => {
-                game_text(&format!("Score: {}", score), font, &player_lives);
+                game_text(&format!("Score: {}", score), font, &player_lives, &level);
                 player.update(get_frame_time());
                 for ball in balls.iter_mut() {
                     ball.update(get_frame_time(), &player);
