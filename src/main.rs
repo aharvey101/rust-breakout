@@ -6,8 +6,16 @@ const PLAYER_SIZE: Vec2 = Vec2::from_array([150f32, 20f32]);
 const BLOCK_SIZE: Vec2 = Vec2::from_array([75f32, 20f32]);
 const BALL_SIZE: f32 = 20f32;
 const BALL_SPEED: f32 = 250f32;
+const POWER_UP_SIZE: Vec2 = Vec2::from_array([20f32, 20f32]);
+const POWER_UP_SPEED: f32 = 5f32;
 struct Player {
     rect: Rect,
+}
+
+struct Powerup {
+    rect: Rect,
+    velocity: Vec2,
+    powerup_type: PowerupType,
 }
 
 pub fn draw_title_text(text: &str, font: Font, offset: f32) {
@@ -94,25 +102,28 @@ fn init_blocks(blocks: &mut Vec<Block>, level: &mut usize) {
         100f32,
     );
     // instead of creating an array, filling random, a function that creates the level according to the
-    let level_one = vec![0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
-    let level_two = vec![0, 22, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,1];
+    let level_one = vec![
+        2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2,
+    ];
+    let level_two = vec![0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1];
     let level_three = vec![
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
     ];
     let levels = vec![&level_one, &level_two, &level_three];
     // TODO: This produces an off by 1 error when level is increased past the length of levels
-    for block in 0..levels[*level].len()  {
-        let block_x = (block % width) as f32 * total_block_size.x;
-        let block_y = (block / width) as f32 * total_block_size.y;
-        // let rand_index = rand::gen_range(0, blocks.len());
-        // println!("{}", level_one[rand_index]);
-        print!("{}", block);
-        let block_type = match level_one[block]   {
+    let level_data = levels[*level];
+
+    for i in 0..level_data.len() {
+        let block_x = (i % width) as f32 * total_block_size.x;
+        let block_y = (i / width) as f32 * total_block_size.y;
+
+        let block_type = match level_data[i] {
             0 => BlockType::Regular,
             1 => BlockType::SpawnBallOnDeath,
+            2 => BlockType::DropLife,
             _ => BlockType::Regular,
         };
-
         blocks.push(Block::new(board_start + vec2(block_x, block_y), block_type));
     }
 }
@@ -132,15 +143,20 @@ pub enum GameState {
     GameCompleted,
     Dead,
 }
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum BlockType {
     Regular,
     SpawnBallOnDeath,
+    DropLife,
 }
 #[derive(PartialEq)]
 enum BallState {
     AttachedToPlayer,
     Free,
+}
+
+enum PowerupType {
+    NewLife,
 }
 
 struct Block {
@@ -203,8 +219,32 @@ impl Block {
                 _ => DARKBLUE,
             },
             BlockType::SpawnBallOnDeath => YELLOW,
+            BlockType::DropLife => BLACK,
         };
         draw_rectangle(self.rect.x, self.rect.y, self.rect.w, self.rect.h, color);
+    }
+}
+
+impl Powerup {
+    pub fn new(pos: Vec2, powerup_type: PowerupType, velocity: Vec2) -> Self {
+        Self {
+            rect: Rect::new(pos.x, pos.y, POWER_UP_SIZE.x, POWER_UP_SIZE.y),
+            velocity: velocity,
+            powerup_type: powerup_type,
+        }
+    }
+    // TODO: fix as this will be gross
+
+    // add lots of y to Powerup as a temporary fix
+    pub fn add_height(&mut self) {
+        self.rect.y += 1000f32;
+    }
+    pub fn update(&mut self, dt: f32, player: &Player) {
+        self.rect.y += self.velocity.y * dt * POWER_UP_SPEED;
+    }
+
+    pub fn draw(&self) {
+        draw_circle(self.rect.x, self.rect.y, self.rect.w * 0.5, BLUE)
     }
 }
 
@@ -230,6 +270,7 @@ impl Player {
             self.rect.x = screen_width() - self.rect.w
         }
     }
+
     pub fn draw(&self) {
         draw_rectangle(self.rect.x, self.rect.y, self.rect.w, self.rect.h, BLUE);
     }
@@ -268,7 +309,8 @@ async fn main() {
     let mut player = Player::new();
     let mut blocks = Vec::new();
     let mut balls = Vec::new();
-    let mut level = 1;
+    let mut powerups = Vec::new();
+    let mut level = 0;
 
     init_blocks(&mut blocks, &mut level);
 
@@ -292,13 +334,14 @@ async fn main() {
                     &format!("Score: {}", score),
                     font,
                     &player_lives,
-                    //TODO: seems gross
+                    //TODO: Fix: seems gross
                     &(&level + 1),
                 );
                 player.update(get_frame_time());
                 for ball in balls.iter_mut() {
                     ball.update(get_frame_time(), &player);
                 }
+
                 let mut spawn_later = vec![];
                 for ball in balls.iter_mut() {
                     resolve_collision(&mut ball.rect, &mut ball.velocity, &player.rect);
@@ -308,6 +351,7 @@ async fn main() {
                             block.lives -= 1;
                             if block.lives == 0 {
                                 score += 10;
+                                //TODO: abstract this into it's own function
                                 // if block is special, spawn a ball
                                 if block.block_type == BlockType::SpawnBallOnDeath {
                                     spawn_later.push(Ball::new(
@@ -316,14 +360,39 @@ async fn main() {
                                         BallState::Free,
                                     ));
                                 }
+                                if block.block_type == BlockType::DropLife {
+                                    // create a powerup drop
+                                    powerups.push(Powerup::new(
+                                        vec2(
+                                            block.rect.point().x + (block.rect.w * 0.5f32),
+                                            block.rect.point().y,
+                                        ),
+                                        PowerupType::NewLife,
+                                        vec2(0f32, 50f32),
+                                    ));
+                                }
                             }
                         }
                     }
                 }
+
                 for ball in spawn_later.into_iter() {
                     balls.push(ball);
                 }
-
+                for item in powerups.iter_mut() {
+                    Powerup::draw(&item);
+                    item.update(get_frame_time(), &player);
+                    if resolve_collision(&mut item.rect, &mut item.velocity, &player.rect) {
+                        match item.powerup_type {
+                            PowerupType::NewLife => {
+                                player_lives += 1;
+                            }
+                        }
+                        item.add_height();
+                    }
+                }
+                // removes when they are off screen
+                powerups.retain(|powerup| powerup.rect.y < screen_height());
                 let balls_len = balls.len();
                 let was_last_ball = balls_len == 1;
                 balls.retain(|ball| ball.rect.y < screen_height());
@@ -339,13 +408,10 @@ async fn main() {
                         game_state = GameState::Dead;
                     }
                 }
-                // Remove blocks with 0 lives
+
                 blocks.retain(|block| block.lives > 0);
                 if blocks.is_empty() {
-                    // if another level move to next level, otherwise game is complete
-                    // init blocks for next level
-
-                    level +=1;
+                    level += 1;
                     // TODO: fix magic number
                     if level > 3 {
                         game_state = GameState::GameCompleted;
@@ -383,11 +449,8 @@ async fn main() {
                 draw_title_text(&format!("You Win! Score: {}", score), font, 0f32);
             }
             GameState::Dead => {
-                draw_title_text(
-                    &format!("You Lose! Score: {}", score),
-                    font, 0f32
-                );
-                draw_title_text("Press SPACE to start again", font,  50f32);
+                draw_title_text(&format!("You Lose! Score: {}", score), font, 0f32);
+                draw_title_text("Press SPACE to start again", font, 50f32);
                 if is_key_pressed(KeyCode::Space) {
                     reset_game(
                         &mut score,
