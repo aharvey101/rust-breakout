@@ -1,14 +1,16 @@
+use crate::ball::ball::*;
 use macroquad::input::*;
 use macroquad::prelude::*;
+
+mod ball;
 
 const PLAYER_SIZE: Vec2 = Vec2::from_array([150f32, 20f32]);
 
 const BLOCK_SIZE: Vec2 = Vec2::from_array([75f32, 20f32]);
 const BALL_SIZE: f32 = 20f32;
-const BALL_SPEED: f32 = 250f32;
 const POWER_UP_SIZE: Vec2 = Vec2::from_array([20f32, 20f32]);
 const POWER_UP_SPEED: f32 = 5f32;
-struct Player {
+pub struct Player {
     rect: Rect,
 }
 
@@ -129,7 +131,7 @@ fn init_blocks(blocks: &mut Vec<Block>, level: &mut usize) {
 }
 
 fn init_balls(balls: &mut Vec<Ball>, player: &Player) {
-    balls.push(Ball::new(
+    balls.push(crate::Ball::new(
         player.rect.point() + vec2(0f32, -BALL_SIZE),
         vec2(0f32, 0f32),
         BallState::AttachedToPlayer,
@@ -150,11 +152,6 @@ enum BlockType {
     DropLife,
 }
 #[derive(PartialEq)]
-enum BallState {
-    AttachedToPlayer,
-    Free,
-}
-
 enum PowerupType {
     NewLife,
 }
@@ -163,44 +160,6 @@ struct Block {
     rect: Rect,
     lives: i32,
     block_type: BlockType,
-}
-
-struct Ball {
-    rect: Rect,
-    velocity: Vec2,
-    ball_state: BallState,
-}
-
-impl Ball {
-    pub fn new(pos: Vec2, velocity: Vec2, ball_state: BallState) -> Self {
-        Self {
-            rect: Rect::new(pos.x, pos.y, BALL_SIZE, BALL_SIZE),
-            velocity: velocity,
-            ball_state: ball_state,
-        }
-    }
-    pub fn update(&mut self, dt: f32, player: &Player) {
-        if self.ball_state == BallState::AttachedToPlayer {
-            self.rect.x = player.rect.x + player.rect.w * 0.5;
-            self.rect.y = player.rect.y - self.rect.h * 0.5;
-        }
-
-        self.rect.x += self.velocity.x * dt * BALL_SPEED;
-        self.rect.y += self.velocity.y * dt * BALL_SPEED;
-        if self.rect.x < 0f32 {
-            self.velocity.x = 1f32;
-        }
-        if self.rect.x > screen_width() - self.rect.w {
-            self.velocity.x = -1f32;
-        }
-        if self.rect.y < 0f32 {
-            self.velocity.y = 1f32;
-        }
-    }
-
-    pub fn draw(&self) {
-        draw_circle(self.rect.x, self.rect.y, self.rect.w * 0.5, BLACK)
-    }
 }
 
 impl Block {
